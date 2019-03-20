@@ -1,7 +1,8 @@
 # loadmaster
 
 > A loadmaster is an aircrew member on civilian aircraft or military transport aircraft tasked with the safe loading, transport and unloading of aerial cargoes.
-> -- <cite>Wikipedia</cite>
+>
+> &mdash; <cite>Wikipedia</cite>
 
 This is a _simple_ tool for reading a Concourse pipeline configuration and downloading resources from blob store.
 
