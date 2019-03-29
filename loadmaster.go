@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"os"
@@ -104,8 +105,8 @@ type Request struct {
 	Version map[string]interface{} `json:"version"`
 }
 
-func LoadPipeline(path string) (PipelineConfig, error) {
-	yamlFile, err := ioutil.ReadFile(path)
+func LoadPipeline(reader io.Reader) (PipelineConfig, error) {
+	yamlFile, err := ioutil.ReadAll(reader)
 	if err != nil {
 		log.Fatalf("ReadFile: %v", err)
 	}
@@ -161,11 +162,16 @@ func main() {
 
 	sort.Strings(getResources)
 
-	if len(flag.Args()) != 1 {
-		fmt.Printf(Usage, os.Args[0])
-		os.Exit(-1)
+	pipelineYaml := os.Stdin
+	if len(flag.Args()) >= 1 {
+		if yamlFile, err := os.Open(flag.Arg(0)); err == nil {
+			pipelineYaml = yamlFile
+		} else {
+			log.Fatalf("Open: %v", err)
+		}
 	}
-	pipeline, _ := LoadPipeline(flag.Arg(0))
+
+	pipeline, _ := LoadPipeline(pipelineYaml)
 	resourceTypes := ResourceTypeCache(pipeline.ResourceTypes)
 
 	for _, resource := range pipeline.Resources {

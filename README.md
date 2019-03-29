@@ -9,6 +9,9 @@ This is a _simple_ tool for reading a Concourse pipeline configuration and downl
 ```sh
 fly -t <target> get-pipeline --pipeline <pipeline-name> > pipeline.yml
 ./loadmaster [-i <resource-name>] pipeline.yml
+
+# or pipe in the pipeline yaml
+fly -t <target> get-pipeline --pipeline <pipeline-name> | ./loadmaster [-i <resource-name>]
 ```
 
 The `-i` flag may be given multiple times to fetch multiple resources; if `-i` flag is given, *all* resources are fetched.
