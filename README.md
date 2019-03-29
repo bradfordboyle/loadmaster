@@ -15,6 +15,5 @@ fly -t <target> get-pipeline --pipeline <pipeline-name> > pipeline.yml
 
 This is still a _proof of concept_; here are the limitations:
 
-1. Only works w/ the [`gcs` resource](https://github.com/frodenas/gcs-resource)
-2. Downloads all the supported resources
-3. Requires credentials to already be interpolated in the pipeline config
+1. Downloads all the supported resources
+2. Requires credentials to already be interpolated in the pipeline config

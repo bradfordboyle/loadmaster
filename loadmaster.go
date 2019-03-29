@@ -19,8 +19,82 @@ type Resource struct {
 	Source map[string]interface{}
 }
 
+type ResourceTypeSource struct {
+	Repository string
+	Tag        string
+}
+
+func (r ResourceTypeSource) String() string {
+	if r.Tag != "" {
+		return fmt.Sprintf("%s:%s", r.Repository, r.Tag)
+	}
+
+	return r.Repository
+}
+
+type ResourceType struct {
+	Name   string
+	Type   string
+	Source ResourceTypeSource
+}
+
+func (r *ResourceType) Check(request Request) ([]map[string]interface{}, error) {
+	image := r.Source.String()
+	cmd := exec.Command("docker", "run", "--rm", "--interactive", image, "/opt/resource/check")
+	b, err := json.Marshal(request)
+	if err != nil {
+		return nil, err
+	}
+	cmd.Stdin = bytes.NewBuffer(b)
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	err = cmd.Run()
+	if err != nil {
+		return nil, err
+	}
+	var versions []map[string]interface{}
+	json.Unmarshal(out.Bytes(), &versions)
+
+	return versions, nil
+}
+
+func (r *ResourceType) Get(name string, request Request) (map[string]interface{}, error) {
+	_, err := os.Stat(name)
+	if os.IsNotExist(err) {
+		errDir := os.Mkdir(name, 0755)
+		if errDir != nil {
+			return nil, errDir
+		}
+	}
+	hostResourcePath, err := filepath.Abs(name)
+	if err != nil {
+		return nil, err
+	}
+	containerResourcePath := fmt.Sprintf("/srv/%s", name)
+	volumeMapping := hostResourcePath + ":" + containerResourcePath
+	image := r.Source.String()
+	cmd := exec.Command("docker", "run", "--rm", "--interactive", "--volume", volumeMapping, image, "/opt/resource/in", containerResourcePath)
+	b, err := json.Marshal(request)
+	if err != nil {
+		return nil, err
+	}
+	cmd.Stdin = bytes.NewBuffer(b)
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = os.Stderr
+	err = cmd.Run()
+	if err != nil {
+		return nil, err
+	}
+	var metadata map[string]interface{}
+	json.Unmarshal(out.Bytes(), &metadata)
+
+	return metadata, nil
+}
+
 type PipelineConfig struct {
-	Resources []Resource `yaml:"resources"`
+	Resources     []Resource     `yaml:"resources"`
+	ResourceTypes []ResourceType `yaml:"resource_types"`
 }
 
 type Request struct {
@@ -42,56 +116,24 @@ func LoadPipeline(path string) (PipelineConfig, error) {
 	return p, nil
 }
 
-func GetVersions(request Request) ([]map[string]interface{}, error) {
-	cmd := exec.Command("docker", "run", "--rm", "--interactive", "frodenas/gcs-resource", "/opt/resource/check")
-	b, err := json.Marshal(request)
-	if err != nil {
-		return nil, err
+func ResourceTypeCache(resourceTypes []ResourceType) map[string]ResourceType {
+	cache := make(map[string]ResourceType)
+	for _, r := range resourceTypes {
+		cache[r.Name] = r
 	}
-	cmd.Stdin = bytes.NewBuffer(b)
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	err = cmd.Run()
-	if err != nil {
-		return nil, err
-	}
-	var versions []map[string]interface{}
-	json.Unmarshal(out.Bytes(), &versions)
 
-	return versions, nil
-}
+	// add concourse git
+	if _, ok := cache["git"]; !ok {
+		cache["git"] = ResourceType{
+			Name: "git",
+			Type: "docker-image",
+			Source: ResourceTypeSource{
+				Repository: "concourse/git-resource",
+				Tag:        "latest",
+			}}
+	}
 
-func GetResource(name string, request Request) (map[string]interface{}, error) {
-	_, err := os.Stat(name)
-	if os.IsNotExist(err) {
-		errDir := os.Mkdir(name, 0755)
-		if errDir != nil {
-			return nil, errDir
-		}
-	}
-	hostResourcePath, err := filepath.Abs(name)
-	if err != nil {
-		return nil, err
-	}
-	containerResourcePath := fmt.Sprintf("/srv/%s", name)
-	volumeMapping := hostResourcePath + ":" + containerResourcePath
-	cmd := exec.Command("docker", "run", "--rm", "--interactive", "--volume", volumeMapping, "frodenas/gcs-resource", "/opt/resource/in", containerResourcePath)
-	b, err := json.Marshal(request)
-	if err != nil {
-		return nil, err
-	}
-	cmd.Stdin = bytes.NewBuffer(b)
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = os.Stderr
-	err = cmd.Run()
-	if err != nil {
-		return nil, err
-	}
-	var metadata map[string]interface{}
-	json.Unmarshal(out.Bytes(), &metadata)
-
-	return metadata, nil
+	return cache
 }
 
 const Usage = `Usage:
@@ -104,19 +146,18 @@ func main() {
 		os.Exit(-1)
 	}
 	pipeline, _ := LoadPipeline(os.Args[1])
+	resourceTypes := ResourceTypeCache(pipeline.ResourceTypes)
 
 	for _, resource := range pipeline.Resources {
-		if resource.Type != "gcs" {
-			continue
-		}
+		resourceType := resourceTypes[resource.Type]
 		request := Request{
 			Source:  resource.Source,
 			Version: nil,
 		}
 
-		versions, err := GetVersions(request)
+		versions, err := resourceType.Check(request)
 		if err != nil {
-			log.Fatalf("GetVersion: %v", err)
+			log.Fatalf("Check: %v", err)
 		}
 
 		if len(versions) == 0 {
@@ -124,12 +165,9 @@ func main() {
 		}
 
 		request.Version = versions[0]
-		metadata, err := GetResource(resource.Name, request)
+		_, err = resourceType.Get(resource.Name, request)
 		if err != nil {
-			log.Fatalf("GetResource: %v", err)
+			log.Fatalf("Get: %v", err)
 		}
-
-		fmt.Printf("%v\n", metadata)
-
 	}
 }
