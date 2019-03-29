@@ -8,12 +8,13 @@ This is a _simple_ tool for reading a Concourse pipeline configuration and downl
 
 ```sh
 fly -t <target> get-pipeline --pipeline <pipeline-name> > pipeline.yml
-./loadmaster pipeline.yml
+./loadmaster [-i <resource-name>] pipeline.yml
 ```
+
+The `-i` flag may be given multiple times to fetch multiple resources; if `-i` flag is given, *all* resources are fetched.
 
 ## Limitations
 
 This is still a _proof of concept_; here are the limitations:
 
-1. Downloads all the supported resources
-2. Requires credentials to already be interpolated in the pipeline config
+1. Requires credentials to already be interpolated in the pipeline config

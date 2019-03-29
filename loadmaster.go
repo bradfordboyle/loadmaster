@@ -3,12 +3,14 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 
 	yaml "gopkg.in/yaml.v2"
 )
@@ -140,15 +142,37 @@ const Usage = `Usage:
 %s <pipeline-config>
 `
 
+type GetResources []string
+
+func (g *GetResources) Set(resource string) error {
+	*g = append(*g, resource)
+	return nil
+}
+
+func (g *GetResources) String() string {
+	return fmt.Sprint(*g)
+}
+
 func main() {
-	if len(os.Args) != 2 {
+
+	var getResources GetResources
+	flag.Var(&getResources, "i", "<resouce-name>")
+	flag.Parse()
+
+	sort.Strings(getResources)
+
+	if len(flag.Args()) != 1 {
 		fmt.Printf(Usage, os.Args[0])
 		os.Exit(-1)
 	}
-	pipeline, _ := LoadPipeline(os.Args[1])
+	pipeline, _ := LoadPipeline(flag.Arg(0))
 	resourceTypes := ResourceTypeCache(pipeline.ResourceTypes)
 
 	for _, resource := range pipeline.Resources {
+		idx := sort.SearchStrings(getResources, resource.Name)
+		if len(getResources) != 0 && (idx == len(getResources) || getResources[idx] != resource.Name) {
+			continue
+		}
 		resourceType := resourceTypes[resource.Type]
 		request := Request{
 			Source:  resource.Source,
