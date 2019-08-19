@@ -136,6 +136,17 @@ func ResourceTypeCache(resourceTypes []ResourceType) map[string]ResourceType {
 			}}
 	}
 
+	// add concourse s3
+	if _, ok := cache["s3"]; !ok {
+		cache["s3"] = ResourceType{
+			Name: "s3",
+			Type: "docker-image",
+			Source: ResourceTypeSource{
+				Repository: "concourse/s3-resource",
+				Tag:        "latest",
+			}}
+	}
+
 	return cache
 }
 
